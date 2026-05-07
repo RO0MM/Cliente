@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Diagnóstico Chat Cliente</title>
+  <style>
+    body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:#0b141a;color:#e9edef;padding:18px}
+    .box{max-width:760px;margin:auto;background:#111b21;border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:18px}
+    h1{margin:0 0 8px;font-size:24px}
+    p{color:#b8c4ca}
+    button{border:0;border-radius:12px;background:#00a884;color:#031b12;font-weight:900;padding:12px 14px;cursor:pointer}
+    pre{white-space:pre-wrap;background:#071017;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:14px;color:#d8f8ef;line-height:1.45}
+    .bad{color:#ff9aa8}.ok{color:#7dffbe}.warn{color:#ffd36e}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Diagnóstico del Chat Cliente</h1>
+    <p>Usa esta página para saber si config.js, Supabase y el inicio anónimo están correctos.</p>
+    <button id="btn">Probar conexión</button>
+    <pre id="out">Presiona “Probar conexión”.</pre>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const out = document.getElementById('out');
+    function log(text, cls){
+      out.innerHTML += (cls ? '<span class="'+cls+'">' + text.replace(/[&<>]/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[s])) + '</span>' : text) + "\\n";
+    }
+    document.getElementById('btn').onclick = async () => {
+      out.innerHTML = '';
+      try{
+        log('1) Revisando config.js...');
+        const cfg = window.INNOV_CHAT_CONFIG || {};
+        if(!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY){
+          log('ERROR: config.js no tiene SUPABASE_URL o SUPABASE_ANON_KEY.', 'bad');
+          log('Solución: edita config.js y pega tus datos reales de Supabase.', 'warn');
+          return;
+        }
+        if(cfg.SUPABASE_URL.includes('TU-PROYECTO') || cfg.SUPABASE_ANON_KEY.includes('TU_ANON_KEY')){
+          log('ERROR: config.js todavía tiene datos de ejemplo.', 'bad');
+          log('Solución: reemplaza TU-PROYECTO y TU_ANON_KEY_PUBLICA.', 'warn');
+          return;
+        }
+        log('OK: config.js cargó.', 'ok');
+
+        log('2) Creando cliente Supabase...');
+        const sb = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
+          auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:false}
+        });
+        log('OK: cliente Supabase creado.', 'ok');
+
+        log('3) Probando sesión anónima...');
+        const { data: ses, error: authErr } = await sb.auth.signInAnonymously();
+        if(authErr){
+          log('ERROR en Anonymous Sign-In: ' + authErr.message, 'bad');
+          log('Solución: Supabase > Authentication > Sign In / Providers > activar Anonymous Sign-Ins.', 'warn');
+          return;
+        }
+        log('OK: sesión anónima activa.', 'ok');
+
+        log('4) Probando acceso a tabla conversations...');
+        const { data, error } = await sb.from('conversations').select('id').limit(1);
+        if(error){
+          log('ERROR en tabla conversations: ' + error.message, 'bad');
+          log('Solución: ejecuta supabase_chat_integrado.sql en SQL Editor.', 'warn');
+          return;
+        }
+        log('OK: tabla conversations responde.', 'ok');
+
+        log('');
+        log('TODO LISTO: el chat cliente puede funcionar en esta URL.', 'ok');
+      }catch(e){
+        log('ERROR inesperado: ' + (e.message || e), 'bad');
+      }
+    };
+  </script>
+</body>
+</html>
